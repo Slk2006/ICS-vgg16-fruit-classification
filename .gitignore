@@ -1,0 +1,14 @@
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+data/organized_dataset/
+dataset/
+*.pkl
+*.h5
+*.keras
+*.tar
+*.zip
+.env
+tf-gpu-linux/
+tf-gpu-env/
+Untitled.ipynb
