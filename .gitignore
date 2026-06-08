@@ -12,3 +12,4 @@ dataset/
 tf-gpu-linux/
 tf-gpu-env/
 Untitled.ipynb
+*.pkl
