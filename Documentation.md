@@ -20,7 +20,6 @@ The goal is to classify **15 fruit species** using a fine-tuned VGG16 model. The
 
 The training set has severe class imbalance — Guava has 13,788 images while Persimmon has only 1,450.
 
-<!-- Exp-1_CCE.ipynb → "Training Set Class Distribution – Severe Imbalance" -->
 ![Training Set Class Distribution](images/class_distribution.png)
 *Figure 1: Training set class distribution showing severe imbalance across 15 fruit classes.*
 
@@ -52,16 +51,19 @@ We used the **VGG16 architecture** pre-trained on ImageNet. The convolutional ba
 
 ## 4. Custom Loss Functions
 
-### 4.1 Why Custom Loss?
+### 4.1 Why Standard CCE Fails – And How We Identified the Problems
 
-Standard **Categorical Cross-entropy (CCE)** treats all classes and all examples equally. This leads to two problems:
+We first trained a baseline model using the standard **Categorical Cross-entropy (CCE)** loss. Analysis of its predictions revealed two major weaknesses:
 
-| Problem | Manifestation | Consequence |
+| Problem | Evidence from baseline | Consequence |
 |---|---|---|
-| Class imbalance | Guava has 13,788 images; Persimmon only 1,450 | Model ignores minority classes → low recall |
-| Inter-class similarity | Some fruits look very similar (e.g., different apple varieties) | Model is overconfident on easy examples, fails on hard pairs |
+| Class imbalance | Training set has 13,788 Guava vs. 1,450 Persimmon. Baseline confusion matrix shows low recall on minority classes (Persimmon, Carambola, etc.). Average recall on minority classes (<2000 images) was only 0.798, while majority classes reached 0.816. | The model focuses on majority classes and largely ignores rare fruits. |
+| Hard examples | Confusion matrix shows high off-diagonal entries between visually similar pairs (e.g., 247 Apple → Guava errors, 113 Pear → Guava errors). | The model becomes overconfident on easy examples and fails to discriminate between similar fruits. |
 
-Custom losses modify the loss landscape to force the model to focus on what matters.
+These observations directly motivated our choice of two custom loss functions:
+
+- **Weighted Categorical Cross-entropy** – to force the model to pay attention to minority classes.
+- **Focal Loss** – to force the model to focus on hard, misclassified examples.
 
 ---
 
@@ -82,6 +84,8 @@ The weighted loss is:
 $$L = -w_c \cdot \log(p_c)$$
 
 where $p_c$ is the predicted probability for the true class.
+
+**Why this solves imbalance:** Minority classes get larger $w_c$, so their misclassifications contribute more to the total loss. The gradient update therefore pushes the model to improve its predictions on those rare classes.
 
 **Implementation (TensorFlow/Keras):**
 
@@ -115,6 +119,8 @@ where:
 - $p_t$ = model's estimated probability for the true class
 - $\gamma \geq 0$ — focusing parameter (used $\gamma = 2.0$)
 - $\alpha$ — balance parameter (used $\alpha = 0.25$)
+
+**Why this solves hard examples:** When a sample is easy ($p_t$ close to 1), the factor $(1 - p_t)^{\gamma}$ becomes very small, so its loss is heavily reduced. Hard examples (where $p_t$ is low) retain almost their full cross-entropy loss. Thus the model prioritises learning the patterns that discriminate between similar fruits.
 
 **Implementation:**
 
@@ -158,13 +164,11 @@ Three models were trained with **identical hyperparameters**, varying only the l
 
 #### Final Test Accuracy – Bar Chart
 
-<!-- Exp-4_Comparison.ipynb → "Final Test Accuracy Comparison" bar chart -->
 ![Test Accuracy Comparison](images/test_accuracy_comparison.png)
 *Figure 2: Final test accuracy across all three loss functions.*
 
 #### Validation Accuracy & Loss Curves – All Three Models
 
-<!-- Exp-4_Comparison.ipynb → "Validation Accuracy Comparison" + "Validation Loss Comparison" side-by-side -->
 ![Validation Curves Comparison](images/val_curves_comparison.png)
 *Figure 3: Validation accuracy (left) and validation loss (right) across epochs for all three experiments.*
 
@@ -174,17 +178,15 @@ Three models were trained with **identical hyperparameters**, varying only the l
 
 #### Exp-1: CCE Baseline
 
-> Training curves were not separately plotted for Exp-1; see the comparison chart (Figure 3) above.
+> Training curves for Exp-1 are shown in the comparison chart (Figure 3) above.
 
 #### Exp-2: Weighted Categorical Cross-entropy
 
-<!-- Exp-2_WCE.ipynb → "Weighted CE - Accuracy" and "Weighted CE - Loss" subplots -->
 ![Weighted CE Training Curves](images/wce_training_curves.png)
 *Figure 4: Training and validation accuracy/loss curves for the Weighted CE experiment.*
 
 #### Exp-3: Focal Loss
 
-<!-- Exp-3_FocalLoss.ipynb → "Focal Loss - Accuracy" and "Focal Loss - Loss" subplots -->
 ![Focal Loss Training Curves](images/focal_training_curves.png)
 *Figure 5: Training and validation accuracy/loss curves for the Focal Loss experiment.*
 
@@ -194,25 +196,21 @@ Three models were trained with **identical hyperparameters**, varying only the l
 
 #### CCE Baseline
 
-<!-- Exp-1_CCE.ipynb → "Normalised Confusion Matrix – CCE Baseline" -->
 ![CCE Confusion Matrix](images/cm_cce.png)
 *Figure 6: Normalised confusion matrix – CCE baseline. Note low recall on minority classes (Persimmon, Carambola).*
 
 #### Weighted Categorical Cross-entropy
 
-<!-- Exp-2_WCE.ipynb → "Normalised Confusion Matrix – Weighted CE" -->
 ![WCE Confusion Matrix](images/cm_wce.png)
 *Figure 7: Normalised confusion matrix – Weighted CE. Diagonal values for minority classes are significantly higher.*
 
 #### Focal Loss
 
-<!-- Exp-3_FocalLoss.ipynb → "Normalised Confusion Matrix – Focal Loss" -->
 ![Focal Loss Confusion Matrix](images/cm_focal.png)
 *Figure 8: Normalised confusion matrix – Focal Loss. Reduced confusion on hard pairs (e.g., Pear → Apple).*
 
 #### Side-by-Side Comparison
 
-<!-- Exp-4_Comparison.ipynb → all 3 confusion matrices plotted side-by-side -->
 ![Confusion Matrix Comparison](images/cm_comparison.png)
 *Figure 9: Side-by-side confusion matrices for CCE, Weighted CE, and Focal Loss.*
 
@@ -241,7 +239,8 @@ The project demonstrates a complete deep learning pipeline: data preparation, tr
 | Name | Roll Number | Contributions |
 |---|---|---|
 | Shravan K. | CS24B1023 | Data organisation, dataset restructuring, baseline CCE experiment, Weighted Categorical Cross-entropy experiment |
-| Rohitman | AD24B1054 | Focal Loss experiment, comparative analysis, project documentation, GitHub repository management, literature review (Focal Loss paper) |
+| Rohitman | AD24B1054 | Focal Loss experiment, comparative analysis, project documentation, literature review (Focal Loss paper) |
+
 
 ---
 
